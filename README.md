@@ -1,28 +1,22 @@
-# Universo Criativo — Gerador de Catálogo
+# Universo Criativo — Gerador Editorial de Catálogo
 
-Aplicativo em Streamlit para transformar o PDF de uma artista em duas páginas padronizadas de e-book:
+Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas editoriais sofisticadas e coerentes para o catálogo **Universo Criativo e Elas — Um Mundo de Imagens**.
 
-- página 1: nome, localidade, fotografia, frase opcional e biografia;
-- página 2: continuação da biografia, 2 ou 3 obras e fichas técnicas;
-- link opcional da artista com QR code e link clicável no PDF;
-- exportação em PDF e PNG.
+## Recursos
 
-## Publicar no Streamlit Community Cloud
+- extração de texto e imagens do PDF;
+- revisão manual de nome, localidade e biografia;
+- suporte a 2 ou 3 obras;
+- fichas técnicas editáveis;
+- texto justificado e PDF pesquisável;
+- 5 famílias visuais: Orgânico, Contemporâneo, Minimalista, Poético e Geométrico;
+- recomendação automática de estilo a partir da paleta das obras;
+- variações de composição sem perder a identidade editorial;
+- QR code e link opcional;
+- prévia e download em PDF e PNG.
 
-1. Envie todos os arquivos deste projeto para o repositório GitHub.
-2. Acesse `https://share.streamlit.io` e entre com a conta GitHub.
-3. Clique em **Create app**.
-4. Escolha o repositório `universo-criativo-catalogo`.
-5. Em **Main file path**, informe `app.py`.
-6. Clique em **Deploy**.
+## Publicação
 
-## Executar localmente
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-## Observação
-
-O app não usa API externa nem envia os PDFs a serviços de terceiros. O processamento ocorre durante a sessão do Streamlit.
+- arquivo principal: `app.py`
+- branch: `main`
+- o Streamlit instala as fontes listadas em `packages.txt`
