@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import colorsys
+from copy import deepcopy
 import hashlib
 import io
 import os
@@ -570,17 +571,53 @@ def _draw_image_frame(c: canvas.Canvas, x: float, y: float, w: float, h: float, 
     c.restoreState()
 
 
+
+class EditorialParagraph(Paragraph):
+    """Paragraph that prefers page breaks at sentence boundaries.
+
+    ReportLab normally splits a paragraph at the last line that fits. For an
+    artist biography, that can leave half a sentence on each page. This class
+    first looks for the last complete sentence that fits and only falls back
+    to line-level splitting when a single sentence is taller than the box.
+    """
+
+    _sentence_boundary = re.compile(r"(?<=[.!?…])\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ])")
+
+    def __init__(self, text, style, **kwargs):
+        super().__init__(text, style, **kwargs)
+        self._editorial_text = text or ""
+
+    def split(self, availWidth, availHeight):
+        sentences = [part.strip() for part in self._sentence_boundary.split(self._editorial_text) if part.strip()]
+        if len(sentences) > 1:
+            for cut in range(len(sentences) - 1, 0, -1):
+                first_text = " ".join(sentences[:cut])
+                second_text = " ".join(sentences[cut:])
+                first_style = deepcopy(self.style)
+                first_style.spaceAfter = 0
+                second_style = deepcopy(self.style)
+                second_style.firstLineIndent = 0
+                first = EditorialParagraph(first_text, first_style)
+                _, first_h = first.wrap(availWidth, availHeight)
+                if first_h <= availHeight + 0.1:
+                    second = EditorialParagraph(second_text, second_style)
+                    return [first, second]
+        parts = super().split(availWidth, availHeight)
+        if len(parts) > 1:
+            parts[0].spaceAfter = 0
+        return parts
+
 def _paragraphs_from_text(text: str, style: ParagraphStyle) -> list:
     text = re.sub(r"[ \t]+", " ", text.strip())
     chunks = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     if not chunks:
         return []
     story: list = []
-    for idx, chunk in enumerate(chunks):
+    for chunk in chunks:
         safe = chunk.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        story.append(Paragraph(safe, style))
-        if idx < len(chunks) - 1:
-            story.append(Spacer(1, 3.2 * mm))
+        # Paragraph spacing is controlled exclusively by the source-derived
+        # style. Do not add a second Spacer, which would double the gap.
+        story.append(EditorialParagraph(safe, style))
     return story
 
 
@@ -604,8 +641,13 @@ def _make_styles(
             leading=body_leading,
             textColor=colors.HexColor("#2d2b28"),
             alignment=TA_JUSTIFY,
-            allowWidows=1,
-            allowOrphans=1,
+            # Preserve whole words at page breaks. The text remains justified,
+            # but automatic hyphenation is disabled so a word never starts on
+            # page 1 and finishes on page 2.
+            hyphenationLang="",
+            embeddedHyphenation=0,
+            allowWidows=0,
+            allowOrphans=0,
             splitLongWords=1,
             spaceAfter=paragraph_space_after,
             firstLineIndent=0,
@@ -773,12 +815,20 @@ def _draw_story_in_box(
         parts = flowable.split(w, max(0, available_h - space_before))
         if parts:
             first = parts[0]
+            continuation = list(parts[1:])
+            # A paragraph split across pages/boxes is still the same
+            # paragraph. The first fragment must not receive paragraph-end
+            # spacing; only the final fragment keeps spaceAfter.
+            if continuation:
+                first.spaceAfter = 0
+                for fragment in continuation[:-1]:
+                    fragment.spaceAfter = 0
             fw1, fh1 = first.wrap(w, available_h)
             if fh1 <= available_h + 0.1:
                 cursor -= space_before + fh1
                 first.drawOn(c, x, cursor)
                 cursor -= first.getSpaceAfter()
-                remaining = list(parts[1:]) + remaining[1:]
+                remaining = continuation + remaining[1:]
         break
     return remaining, cursor
 
@@ -905,23 +955,26 @@ def _story_required_height(story: list, width: float, maximum: float) -> float:
     return total
 
 
-def _draw_biography_continuation(c: canvas.Canvas, story: list, theme: Theme, family: str, max_height: float) -> tuple[list, float]:
+def _draw_biography_continuation(
+    c: canvas.Canvas,
+    story: list,
+    theme: Theme,
+    family: str,
+    max_height: float,
+) -> tuple[list, float]:
+    """Continue the page-1 biography naturally on page 2.
+
+    There is deliberately no new section title: this is a direct continuation
+    of "Sobre a artista", not a separate trajectory section.
+    """
     if not story:
-        return story, PAGE_H_PT - 37 * mm
+        return story, PAGE_H_PT - 34 * mm
     x, w = 24 * mm, PAGE_W_PT - 48 * mm
-    top = PAGE_H_PT - 38 * mm
-    content_h = _story_required_height(story, w, max_height - 11 * mm)
-    h = min(max_height, max(19 * mm, content_h + 11 * mm))
+    top = PAGE_H_PT - 35 * mm
+    content_h = _story_required_height(story, w, max_height)
+    h = min(max_height, max(8 * mm, content_h))
     y = top - h
-    c.saveState()
-    c.setFillColor(_as_color(theme.accent))
-    c.setFont("UCSansBold", 7.8)
-    c.drawString(x, top - 5 * mm, "TRAJETÓRIA")
-    c.setStrokeColor(_as_color(theme.accent, 0.52))
-    c.setLineWidth(0.7)
-    c.line(x, top - 7.5 * mm, x + 32 * mm, top - 7.5 * mm)
-    c.restoreState()
-    remaining, _ = _draw_story_in_box(c, story, x, y, w, h - 11 * mm)
+    remaining, _ = _draw_story_in_box(c, story, x, y, w, h)
     return remaining, y
 
 def _draw_pdf(
@@ -971,11 +1024,13 @@ def _draw_pdf(
     _draw_title(c, artist_name, location, theme, family, variation, 2)
     footer_reserved = 45 * mm if link.strip() else 17 * mm
 
-    max_cont_h = 48 * mm if len(works) == 2 else 39 * mm
-    top_y = PAGE_H_PT - 37 * mm
+    max_cont_h = 42 * mm if len(works) == 2 else 32 * mm
+    top_y = PAGE_H_PT - 35 * mm
     if story:
         story, cont_bottom = _draw_biography_continuation(c, story, theme, family, max_cont_h)
-        top_y = cont_bottom - 5 * mm
+        # Keep the first artwork visually connected to the biography without
+        # crowding the last line.
+        top_y = cont_bottom - 3 * mm
 
     if len(works) == 2:
         _layout_two_works(c, works, theme, family, variation, top_y, footer_reserved, styles)

@@ -2,7 +2,7 @@
 
 Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas editoriais padronizadas para o catálogo **Universo Criativo e Elas — Um Mundo de Imagens**.
 
-## Melhorias da versão 4
+## Melhorias da versão 5
 
 - página 1 sem cartão vazio ao lado da fotografia: retrato em destaque e biografia abaixo;
 - detecção automática do tamanho do corpo, entrelinha, espaçamento entre parágrafos e família tipográfica do PDF enviado;
@@ -20,3 +20,14 @@ Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas edi
 - arquivo principal: `app.py`
 - branch: `main`
 - o Streamlit instala as fontes listadas em `packages.txt`
+
+
+## Ajustes editoriais da versão 5
+
+- remove o título "Trajetória" da página 2;
+- continua a biografia diretamente, sem criar uma nova seção;
+- preserva os parágrafos detectados no PDF;
+- elimina espaçamento duplicado entre parágrafos;
+- mantém texto justificado sem dividir palavras entre páginas;
+- evita espaço extra quando um parágrafo é dividido entre páginas;
+- aproxima a continuação biográfica das obras.
