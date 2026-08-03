@@ -672,9 +672,9 @@ def draw_background(c: canvas.Canvas, theme: Theme, family: str, variant: int, p
         ]:
             c.setFillColor(_as_color(col, alpha))
             c.circle(cx, cy, radius, fill=1, stroke=0)
-        c.setStrokeColor(_as_color(theme.accent2, 0.45))
-        c.setLineWidth(0.8)
-        c.bezier(0, 62 * mm, 55 * mm, 88 * mm, 115 * mm, 40 * mm, PAGE_W_PT, 70 * mm)
+        # Decorative curves are intentionally omitted from the content area.
+        # The translucent circles already provide the poetic identity without
+        # risking overlap with biographies, artwork metadata, or QR blocks.
     elif family == "geometrico":
         # Geometric accents stay subtle and confined to the outer margins so
         # they never compete with the artworks or technical descriptions.
@@ -689,9 +689,9 @@ def draw_background(c: canvas.Canvas, theme: Theme, family: str, variant: int, p
             c.line(float(x), 0, float(x), PAGE_H_PT)
         for y in np.arange(12 * mm, PAGE_H_PT, step):
             c.line(0, float(y), PAGE_W_PT, float(y))
-        c.setStrokeColor(_as_color(theme.accent3, 0.65))
-        c.setLineWidth(2.0)
-        c.line(20 * mm, 34 * mm, 78 * mm, 34 * mm)
+        # Do not add thick accent strokes inside the lower content zone.
+        # In long biographies that area can still contain the final paragraph,
+        # and on page 2 it can coincide with the optional QR footer.
     c.restoreState()
 
 

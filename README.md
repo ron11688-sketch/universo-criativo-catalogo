@@ -1,4 +1,12 @@
-# Universo Criativo — Gerador Editorial (versão 11)
+# Universo Criativo — Gerador Editorial (versão 12)
+
+Esta versão elimina traços decorativos que poderiam atravessar conteúdo:
+
+- no modelo **Geométrico**, foi removido o traço grosso da faixa inferior;
+- no modelo **Poético**, a curva decorativa foi retirada da área de conteúdo;
+- grades, círculos, molduras e paletas permanecem preservados;
+- biografias, fichas técnicas, obras e QR code ficam em zonas livres de ornamentos sobrepostos;
+- mantém a interface limpa, revisão editável, reset completo e exportação em PDF/PNG.
 
 Esta versão mantém a revisão principal mais limpa:
 

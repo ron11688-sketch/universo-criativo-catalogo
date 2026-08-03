@@ -20,7 +20,7 @@ from catalog_generator import (
     valid_year,
 )
 
-APP_CACHE_VERSION = "11.0-clean-review-ui"
+APP_CACHE_VERSION = "12.0-safe-decorations"
 
 st.set_page_config(page_title="Universo Criativo — Gerador Editorial", page_icon="🎨", layout="wide")
 
@@ -45,7 +45,7 @@ st.markdown(
 st.markdown(
     """
 <div class="uc-hero">
-  <span class="uc-badge">VERSÃO EDITORIAL 11</span>
+  <span class="uc-badge">VERSÃO EDITORIAL 12</span>
   <h1>🎨 Gerador de catálogo — Universo Criativo</h1>
   <p>Crie duas páginas sofisticadas e coerentes para cada artista, preservando texto, fotografia e obras.</p>
   <p class="small-note">O sistema mantém a lógica editorial do e-book, mas varia paleta, ornamentos e composição para que cada artista tenha identidade própria.</p>
