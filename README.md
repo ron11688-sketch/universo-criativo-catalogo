@@ -1,19 +1,18 @@
-# Universo Criativo — Gerador Editorial de Catálogo (v4)
+# Universo Criativo — Gerador Editorial de Catálogo (v6)
 
 Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas editoriais padronizadas para o catálogo **Universo Criativo e Elas — Um Mundo de Imagens**.
 
-## Melhorias da versão 5
+## Melhorias da versão 6
 
-- página 1 sem cartão vazio ao lado da fotografia: retrato em destaque e biografia abaixo;
-- detecção automática do tamanho do corpo, entrelinha, espaçamento entre parágrafos e família tipográfica do PDF enviado;
-- preservação dos parágrafos por blocos do documento original;
-- texto realmente justificado e pesquisável;
-- fichas técnicas posicionadas mais próximas das respectivas obras;
-- zonas de segurança para impedir sobreposição entre ornamentos, obras e QR code;
-- rodapé do QR code com fundo opaco e link clicável;
-- adaptação específica para 2 ou 3 obras, mantendo somente duas páginas;
-- cinco famílias visuais: Orgânico, Contemporâneo, Minimalista, Poético e Geométrico;
-- prévia e exportação em PDF e PNG.
+- pergunta obrigatória para classificar o texto extraído como biografia, descrição de obra ou ausência de apresentação;
+- quando o texto descreve uma obra, o título passa a ser **Sobre a obra**, evitando apresentá-lo como biografia;
+- remove rótulos e cabeçalhos editoriais indevidos da extração do PDF;
+- valida o campo **Ano**, aceitando quatro algarismos ou `s/d`;
+- bloqueia a geração quando um valor textual é identificado incorretamente como ano;
+- reduz a intensidade e o tamanho dos elementos decorativos do estilo Geométrico;
+- mantém ornamentos restritos às margens para não competir com as obras;
+- corrige o botão **Limpar e iniciar nova artista**, inclusive limpando o arquivo do uploader;
+- mantém as melhorias anteriores: texto justificado, parágrafos preservados, 2 ou 3 obras em duas páginas, QR code opcional e cinco famílias visuais.
 
 ## Publicação
 
@@ -21,13 +20,6 @@ Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas edi
 - branch: `main`
 - o Streamlit instala as fontes listadas em `packages.txt`
 
+## Atualização no GitHub
 
-## Ajustes editoriais da versão 5
-
-- remove o título "Trajetória" da página 2;
-- continua a biografia diretamente, sem criar uma nova seção;
-- preserva os parágrafos detectados no PDF;
-- elimina espaçamento duplicado entre parágrafos;
-- mantém texto justificado sem dividir palavras entre páginas;
-- evita espaço extra quando um parágrafo é dividido entre páginas;
-- aproxima a continuação biográfica das obras.
+Substitua no repositório os arquivos `app.py`, `catalog_generator.py`, `requirements.txt`, `packages.txt` e `README.md`. O Streamlit atualizará o mesmo endereço automaticamente.

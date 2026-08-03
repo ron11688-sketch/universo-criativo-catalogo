@@ -148,6 +148,17 @@ def clean_title(value: str) -> str:
     return re.sub(r"\s+-\s*$", "", value.strip())
 
 
+def valid_year(value: str) -> bool:
+    """Accept a four-digit year or an explicit no-date marker."""
+    cleaned = re.sub(r"\s+", " ", (value or "").strip().lower())
+    if cleaned in {"s/d", "sd", "sem data", "não informado", "nao informado"}:
+        return True
+    if not re.fullmatch(r"\d{4}", cleaned):
+        return False
+    year = int(cleaned)
+    return 1800 <= year <= 2100
+
+
 def _clean_pdf_text(value: str) -> str:
     value = value.replace("\u200b", " ").replace("\ufeff", " ").replace("\xa0", " ")
     value = re.sub(r"[ \t]+", " ", value)
@@ -240,6 +251,20 @@ def parse_pdf(pdf_bytes: bytes) -> ParsedPDF:
         block_text = block_text.replace("\n", " ")
         block_text = re.sub(r"\s+", " ", block_text).strip()
         if not block_text:
+            continue
+        normalized_block = re.sub(r"\s+", " ", block_text).strip().upper()
+        if normalized_block in {
+            "ARTISTA",
+            "SOBRE A ARTISTA",
+            "SOBRE A OBRA",
+            "BIOGRAFIA",
+            "APRESENTAÇÃO",
+            "APRESENTACAO",
+        }:
+            continue
+        if normalized_block.startswith("UNIVERSO CRIATIVO E ELAS"):
+            continue
+        if re.fullmatch(r"\d{1,3}", normalized_block):
             continue
         if biography_blocks and block_text[:1].islower() and not re.search(r"[.!?…][\"'”’)]?$", biography_blocks[-1]):
             biography_blocks[-1] = biography_blocks[-1].rstrip() + " " + block_text
@@ -510,12 +535,14 @@ def draw_background(c: canvas.Canvas, theme: Theme, family: str, variant: int, p
         c.setLineWidth(0.8)
         c.bezier(0, 62 * mm, 55 * mm, 88 * mm, 115 * mm, 40 * mm, PAGE_W_PT, 70 * mm)
     elif family == "geometrico":
-        c.setFillColor(_as_color(theme.accent, 0.16))
-        c.rect(0, PAGE_H_PT - 52 * mm, 68 * mm, 52 * mm, fill=1, stroke=0)
-        c.setFillColor(_as_color(theme.accent2, 0.13))
-        c.rect(PAGE_W_PT - 46 * mm, 0, 46 * mm, 74 * mm, fill=1, stroke=0)
-        c.setStrokeColor(_as_color(theme.text, 0.15))
-        c.setLineWidth(0.5)
+        # Geometric accents stay subtle and confined to the outer margins so
+        # they never compete with the artworks or technical descriptions.
+        c.setFillColor(_as_color(theme.accent, 0.075))
+        c.rect(0, PAGE_H_PT - 38 * mm, 46 * mm, 38 * mm, fill=1, stroke=0)
+        c.setFillColor(_as_color(theme.accent2, 0.055))
+        c.rect(PAGE_W_PT - 28 * mm, 0, 28 * mm, 44 * mm, fill=1, stroke=0)
+        c.setStrokeColor(_as_color(theme.text, 0.075))
+        c.setLineWidth(0.4)
         step = 18 * mm
         for x in np.arange(12 * mm, PAGE_W_PT, step):
             c.line(float(x), 0, float(x), PAGE_H_PT)
@@ -843,6 +870,7 @@ def _layout_page_one(
     variant: int,
     styles: dict[str, ParagraphStyle],
     work_count: int = 2,
+    section_title: str = "SOBRE A ARTISTA",
 ) -> list:
     """Page 1 follows a stable editorial structure: portrait first, biography below."""
     # When three works share page 2, page 1 absorbs more biography while preserving font size.
@@ -857,14 +885,15 @@ def _layout_page_one(
     _draw_image_cover(c, portrait, image_x, image_y, image_w, image_h, contain=False)
 
     bio_x, bio_w, bio_y = 25 * mm, 160 * mm, 24 * mm
-    c.saveState()
-    c.setFillColor(_as_color(theme.accent))
-    c.setFont("UCSansBold", 8.0)
-    c.drawString(bio_x, heading_y, "SOBRE A ARTISTA")
-    c.setStrokeColor(_as_color(theme.accent, 0.58))
-    c.setLineWidth(0.8)
-    c.line(bio_x, heading_y - 2.5 * mm, bio_x + 38 * mm, heading_y - 2.5 * mm)
-    c.restoreState()
+    if story and section_title.strip():
+        c.saveState()
+        c.setFillColor(_as_color(theme.accent))
+        c.setFont("UCSansBold", 8.0)
+        c.drawString(bio_x, heading_y, section_title.strip().upper())
+        c.setStrokeColor(_as_color(theme.accent, 0.58))
+        c.setLineWidth(0.8)
+        c.line(bio_x, heading_y - 2.5 * mm, bio_x + 38 * mm, heading_y - 2.5 * mm)
+        c.restoreState()
 
     if quote.strip():
         safe_quote = quote.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -873,6 +902,8 @@ def _layout_page_one(
         qp.drawOn(c, 32 * mm, heading_y + 0.5 * mm - qh)
         story_top -= 5 * mm
 
+    if not story:
+        return []
     bio_h = story_top - bio_y
     remaining, _ = _draw_story_in_box(c, story, bio_x, bio_y, bio_w, bio_h)
     return remaining
@@ -994,6 +1025,7 @@ def _draw_pdf(
     paragraph_space_after: float,
     metadata_font_size: float,
     body_font_family: str,
+    section_title: str,
 ) -> tuple[bytes, bool]:
     register_fonts()
     theme = make_theme(family, palette)
@@ -1015,7 +1047,9 @@ def _draw_pdf(
     draw_background(c, theme, family, variation, 1)
     _draw_title(c, artist_name, location, theme, family, variation, 1)
     story = _paragraphs_from_text(biography, styles["bio"])
-    story = _layout_page_one(c, portrait, quote, story, theme, family, variation, styles, len(works))
+    story = _layout_page_one(
+        c, portrait, quote, story, theme, family, variation, styles, len(works), section_title=section_title
+    )
     _draw_page_number(c, theme, 1)
     c.showPage()
 
@@ -1074,6 +1108,7 @@ def build_catalog(
     paragraph_space_after: float = 12.0,
     metadata_font_size: float = 10.5,
     body_font_family: str = "sans",
+    section_title: str = "SOBRE A ARTISTA",
 ) -> tuple[bytes, bytes, bytes, bool, str, list[tuple[int, int, int]]]:
     ensure_fonts()
     source_images = [portrait] + [w.image for w in works if w.image is not None]
@@ -1096,6 +1131,7 @@ def build_catalog(
         paragraph_space_after=max(5.0, min(22.0, float(paragraph_space_after))),
         metadata_font_size=max(9.5, min(12.0, float(metadata_font_size))),
         body_font_family=body_font_family if body_font_family in {"sans", "serif"} else "sans",
+        section_title=(section_title or "").strip(),
     )
     p1, p2 = pdf_to_png_pages(pdf_bytes)
     return pdf_bytes, p1, p2, overflow, chosen_family, palette
