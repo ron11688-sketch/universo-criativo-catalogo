@@ -1,4 +1,12 @@
-# Universo Criativo — Gerador Editorial de Catálogo (v8)
+# Universo Criativo — Gerador Editorial (versão 11)
+
+Esta versão mantém a revisão principal mais limpa:
+
+- biografia e descrições das obras aparecem diretamente em campos editáveis;
+- o texto bruto e os comandos de reclassificação ficam recolhidos em **Texto original e ajustes avançados (opcional)**;
+- os comandos avançados só devem ser usados quando a separação automática precisar ser substituída;
+- mantém validações, reset completo, duas ou três obras e exportação em PDF/PNG.
+
 
 Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas editoriais padronizadas para o catálogo **Universo Criativo e Elas — Um Mundo de Imagens**.
 

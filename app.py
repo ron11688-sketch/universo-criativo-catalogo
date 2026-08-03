@@ -20,7 +20,7 @@ from catalog_generator import (
     valid_year,
 )
 
-APP_CACHE_VERSION = "10.0-text-segments"
+APP_CACHE_VERSION = "11.0-clean-review-ui"
 
 st.set_page_config(page_title="Universo Criativo — Gerador Editorial", page_icon="🎨", layout="wide")
 
@@ -45,7 +45,7 @@ st.markdown(
 st.markdown(
     """
 <div class="uc-hero">
-  <span class="uc-badge">VERSÃO EDITORIAL 10</span>
+  <span class="uc-badge">VERSÃO EDITORIAL 11</span>
   <h1>🎨 Gerador de catálogo — Universo Criativo</h1>
   <p>Crie duas páginas sofisticadas e coerentes para cada artista, preservando texto, fotografia e obras.</p>
   <p class="small-note">O sistema mantém a lógica editorial do e-book, mas varia paleta, ornamentos e composição para que cada artista tenha identidade própria.</p>
@@ -176,59 +176,70 @@ if st.session_state.get("text_defaults_hash") != file_hash:
 if st.session_state.get("text_assignment_status"):
     st.info(st.session_state["text_assignment_status"])
 
-with st.expander("Ver como o app separou os trechos", expanded=False):
+# A revisão principal permanece simples: biografia e descrições já aparecem
+# preenchidas em seus próprios campos. O texto bruto e as ferramentas de
+# reclassificação ficam recolhidos para uso excepcional.
+with st.expander("Texto original e ajustes avançados (opcional)", expanded=False):
+    st.caption(
+        "Os campos de biografia e de descrição das obras já foram preenchidos com a separação sugerida. "
+        "Use esta área apenas quando precisar conferir o texto bruto ou reclassificar manualmente todo o conteúdo."
+    )
+
     text_segments = getattr(parsed, "text_segments", [])
     if text_segments:
+        st.markdown("**Como o app separou os trechos**")
         for segment_index, segment in enumerate(text_segments, start=1):
             st.markdown(f"**Trecho {segment_index} — sugestão: {segment.suggested_destination}**")
             st.write(segment.text)
-    else:
-        st.caption("Nenhum trecho narrativo separado foi identificado.")
 
-st.markdown("#### Texto original extraído do PDF")
-source_text = st.text_area(
-    "Revise o conteúdo original",
-    height=240,
-    key="source_text_editor",
-    placeholder="Todo o texto narrativo extraído do PDF aparecerá aqui.",
-    help=(
-        "Nenhum trecho é descartado. Este campo reúne biografia e descrições; "
-        "os campos específicos abaixo já vêm preenchidos com a separação sugerida."
-    ),
-)
+    source_text = st.text_area(
+        "Texto original extraído do PDF",
+        height=240,
+        key="source_text_editor",
+        placeholder="Todo o texto narrativo extraído do PDF aparecerá aqui.",
+        help=(
+            "Nenhum trecho é descartado. Alterar este campo não modifica automaticamente a biografia "
+            "ou as descrições já preenchidas."
+        ),
+    )
 
-if source_text.strip():
-    assignment_cols = st.columns([1.25, 1, 1, 1, 1.1])
-    with assignment_cols[0]:
-        if st.button("Copiar para a biografia", use_container_width=True):
-            st.session_state["artist_biography"] = st.session_state.get("source_text_editor", "")
-            st.session_state["text_assignment_status"] = "Texto copiado para a biografia da artista."
-            st.session_state.pop("catalog_outputs", None)
-            st.rerun()
-    for work_number in range(1, 4):
-        with assignment_cols[work_number]:
-            if st.button(f"Copiar para a Obra {work_number}", use_container_width=True):
-                st.session_state[f"work_description_{work_number - 1}"] = st.session_state.get(
-                    "source_text_editor", ""
-                )
-                st.session_state["text_assignment_status"] = (
-                    f"Texto copiado para a descrição da Obra {work_number}."
-                )
+    if source_text.strip():
+        st.markdown("**Reclassificação manual do texto completo**")
+        st.caption(
+            "Estes comandos substituem integralmente o campo de destino pelo texto original acima. "
+            "Na maioria dos casos, não é necessário utilizá-los."
+        )
+        assignment_cols = st.columns([1.2, 1, 1, 1, 1.15])
+        with assignment_cols[0]:
+            if st.button("Usar como biografia", use_container_width=True):
+                st.session_state["artist_biography"] = st.session_state.get("source_text_editor", "")
+                st.session_state["text_assignment_status"] = "Texto original usado como biografia da artista."
                 st.session_state.pop("catalog_outputs", None)
                 st.rerun()
-    with assignment_cols[4]:
-        if st.button("Restaurar separação automática", use_container_width=True):
-            st.session_state["artist_biography"] = parsed.biography
-            for description_index in range(3):
-                restored = ""
-                if description_index < len(parsed.works):
-                    restored = parsed.works[description_index].description or ""
-                st.session_state[f"work_description_{description_index}"] = restored
-            st.session_state["text_assignment_status"] = "A separação automática foi restaurada."
-            st.session_state.pop("catalog_outputs", None)
-            st.rerun()
-else:
-    st.warning("Não foi identificado texto narrativo no PDF. Preencha a biografia manualmente.")
+        for work_number in range(1, 4):
+            with assignment_cols[work_number]:
+                if st.button(f"Usar na Obra {work_number}", use_container_width=True):
+                    st.session_state[f"work_description_{work_number - 1}"] = st.session_state.get(
+                        "source_text_editor", ""
+                    )
+                    st.session_state["text_assignment_status"] = (
+                        f"Texto original usado na descrição da Obra {work_number}."
+                    )
+                    st.session_state.pop("catalog_outputs", None)
+                    st.rerun()
+        with assignment_cols[4]:
+            if st.button("Restaurar automático", use_container_width=True):
+                st.session_state["artist_biography"] = parsed.biography
+                for description_index in range(3):
+                    restored = ""
+                    if description_index < len(parsed.works):
+                        restored = parsed.works[description_index].description or ""
+                    st.session_state[f"work_description_{description_index}"] = restored
+                st.session_state["text_assignment_status"] = "A separação automática foi restaurada."
+                st.session_state.pop("catalog_outputs", None)
+                st.rerun()
+    else:
+        st.caption("Nenhum texto narrativo foi identificado no PDF.")
 
 col_a, col_b = st.columns([1, 1.25])
 with col_a:
