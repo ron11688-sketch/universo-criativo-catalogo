@@ -20,6 +20,8 @@ from catalog_generator import (
     valid_year,
 )
 
+APP_CACHE_VERSION = "10.0-text-segments"
+
 st.set_page_config(page_title="Universo Criativo — Gerador Editorial", page_icon="🎨", layout="wide")
 
 st.markdown(
@@ -43,7 +45,7 @@ st.markdown(
 st.markdown(
     """
 <div class="uc-hero">
-  <span class="uc-badge">VERSÃO EDITORIAL 9</span>
+  <span class="uc-badge">VERSÃO EDITORIAL 10</span>
   <h1>🎨 Gerador de catálogo — Universo Criativo</h1>
   <p>Crie duas páginas sofisticadas e coerentes para cada artista, preservando texto, fotografia e obras.</p>
   <p class="small-note">O sistema mantém a lógica editorial do e-book, mas varia paleta, ornamentos e composição para que cada artista tenha identidade própria.</p>
@@ -55,6 +57,13 @@ st.markdown(
 
 if "reset_nonce" not in st.session_state:
     st.session_state["reset_nonce"] = 0
+
+# Invalida objetos ParsedPDF gravados por versões anteriores do app.
+# Sem isso, o Streamlit pode restaurar do cache um objeto antigo que não
+# possui campos adicionados nas versões mais recentes, como text_segments.
+if st.session_state.get("app_cache_version") != APP_CACHE_VERSION:
+    st.cache_data.clear()
+    st.session_state["app_cache_version"] = APP_CACHE_VERSION
 
 
 def reset_app() -> None:
@@ -85,7 +94,8 @@ def infer_text_kind(text: str) -> str:
 
 
 @st.cache_data(show_spinner=False)
-def cached_parse(data: bytes) -> ParsedPDF:
+def cached_parse(data: bytes, cache_version: str) -> ParsedPDF:
+    # cache_version faz parte da chave e força uma nova análise após upgrades.
     return parse_pdf(data)
 
 
@@ -116,7 +126,7 @@ if st.session_state.get("active_file_hash") != file_hash:
     st.session_state["variation"] = 0
 
 with st.spinner("Analisando texto e imagens do PDF..."):
-    parsed = cached_parse(uploaded.getvalue())
+    parsed = cached_parse(uploaded.getvalue(), APP_CACHE_VERSION)
 
 if not parsed.images:
     st.error("Não encontrei imagens incorporadas no PDF. Verifique se a fotografia e as obras estão dentro do arquivo.")
@@ -130,7 +140,7 @@ st.subheader("2. Confira a artista e todos os textos")
 # is only a starting point: biography and artwork descriptions remain editable.
 if st.session_state.get("text_defaults_hash") != file_hash:
     st.session_state["text_defaults_hash"] = file_hash
-    st.session_state["source_text_editor"] = parsed.source_text or parsed.biography
+    st.session_state["source_text_editor"] = getattr(parsed, "source_text", "") or parsed.biography
     st.session_state["artist_biography"] = parsed.biography
     for description_index in range(3):
         default_description = ""
@@ -167,8 +177,9 @@ if st.session_state.get("text_assignment_status"):
     st.info(st.session_state["text_assignment_status"])
 
 with st.expander("Ver como o app separou os trechos", expanded=False):
-    if parsed.text_segments:
-        for segment_index, segment in enumerate(parsed.text_segments, start=1):
+    text_segments = getattr(parsed, "text_segments", [])
+    if text_segments:
+        for segment_index, segment in enumerate(text_segments, start=1):
             st.markdown(f"**Trecho {segment_index} — sugestão: {segment.suggested_destination}**")
             st.write(segment.text)
     else:
@@ -239,8 +250,8 @@ with col_b:
         f"{len(biography):,} caracteres. O texto será justificado e dividido automaticamente entre as páginas 1 e 2."
     )
     st.caption(
-        f"Configuração detectada no PDF: corpo {parsed.body_font_size:g} pt, "
-        f"entrelinha {parsed.body_leading:g} pt e espaçamento entre parágrafos {parsed.paragraph_space_after:g} pt."
+        f"Configuração detectada no PDF: corpo {getattr(parsed, 'body_font_size', 11.5):g} pt, "
+        f"entrelinha {getattr(parsed, 'body_leading', 15.0):g} pt e espaçamento entre parágrafos {getattr(parsed, 'paragraph_space_after', 12.0):g} pt."
     )
 
 section_title = "SOBRE A ARTISTA"
@@ -251,11 +262,11 @@ preserve_source_typography = st.checkbox(
     help="Mantém tamanho do corpo, entrelinha, espaçamento entre parágrafos e família tipográfica detectados no documento original.",
 )
 if preserve_source_typography:
-    body_font_size = parsed.body_font_size
-    body_leading = parsed.body_leading
-    paragraph_space_after = parsed.paragraph_space_after
-    metadata_font_size = parsed.metadata_font_size
-    body_font_family = parsed.body_font_family
+    body_font_size = getattr(parsed, "body_font_size", 11.5)
+    body_leading = getattr(parsed, "body_leading", 15.0)
+    paragraph_space_after = getattr(parsed, "paragraph_space_after", 12.0)
+    metadata_font_size = getattr(parsed, "metadata_font_size", 10.5)
+    body_font_family = getattr(parsed, "body_font_family", "sans")
 else:
     tc1, tc2, tc3 = st.columns(3)
     with tc1:
