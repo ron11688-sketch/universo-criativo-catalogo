@@ -101,6 +101,32 @@ with col_a:
 with col_b:
     biography = st.text_area("Biografia", value=parsed.biography, height=350)
     st.caption(f"{len(biography):,} caracteres. O texto será justificado e dividido automaticamente entre as páginas 1 e 2.")
+    st.caption(
+        f"Configuração detectada no PDF: corpo {parsed.body_font_size:g} pt, "
+        f"entrelinha {parsed.body_leading:g} pt e espaçamento entre parágrafos {parsed.paragraph_space_after:g} pt."
+    )
+
+preserve_source_typography = st.checkbox(
+    "Preservar o tamanho da fonte e a configuração dos parágrafos do PDF enviado",
+    value=True,
+    help="Mantém tamanho do corpo, entrelinha, espaçamento entre parágrafos e família tipográfica detectados no documento original.",
+)
+if preserve_source_typography:
+    body_font_size = parsed.body_font_size
+    body_leading = parsed.body_leading
+    paragraph_space_after = parsed.paragraph_space_after
+    metadata_font_size = parsed.metadata_font_size
+    body_font_family = parsed.body_font_family
+else:
+    tc1, tc2, tc3 = st.columns(3)
+    with tc1:
+        body_font_size = st.number_input("Tamanho do texto (pt)", 10.5, 13.0, 11.5, 0.25)
+    with tc2:
+        body_leading = st.number_input("Entrelinha (pt)", 13.0, 20.0, 15.0, 0.25)
+    with tc3:
+        paragraph_space_after = st.number_input("Espaço entre parágrafos (pt)", 5.0, 22.0, 12.0, 0.5)
+    metadata_font_size = max(9.5, body_font_size - 1.0)
+    body_font_family = "sans"
 
 st.subheader("3. Identifique as imagens")
 st.write("Confira as miniaturas e selecione qual é o retrato e quais são as obras.")
@@ -248,6 +274,11 @@ if st.button("Gerar prévia editorial", type="primary", use_container_width=True
                     link_label=link_label.strip() if has_link else "",
                     family=selected_family,
                     variation=int(st.session_state.get("variation", 0)),
+                    body_font_size=body_font_size,
+                    body_leading=body_leading,
+                    paragraph_space_after=paragraph_space_after,
+                    metadata_font_size=metadata_font_size,
+                    body_font_family=body_font_family,
                 )
             st.session_state["catalog_outputs"] = (
                 pdf_bytes, p1_bytes, p2_bytes, overflow, artist_name, chosen_family, final_palette

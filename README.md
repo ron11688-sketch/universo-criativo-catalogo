@@ -1,19 +1,19 @@
-# Universo Criativo — Gerador Editorial de Catálogo
+# Universo Criativo — Gerador Editorial de Catálogo (v4)
 
-Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas editoriais sofisticadas e coerentes para o catálogo **Universo Criativo e Elas — Um Mundo de Imagens**.
+Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas editoriais padronizadas para o catálogo **Universo Criativo e Elas — Um Mundo de Imagens**.
 
-## Recursos
+## Melhorias da versão 4
 
-- extração de texto e imagens do PDF;
-- revisão manual de nome, localidade e biografia;
-- suporte a 2 ou 3 obras;
-- fichas técnicas editáveis;
-- texto justificado e PDF pesquisável;
-- 5 famílias visuais: Orgânico, Contemporâneo, Minimalista, Poético e Geométrico;
-- recomendação automática de estilo a partir da paleta das obras;
-- variações de composição sem perder a identidade editorial;
-- QR code e link opcional;
-- prévia e download em PDF e PNG.
+- página 1 sem cartão vazio ao lado da fotografia: retrato em destaque e biografia abaixo;
+- detecção automática do tamanho do corpo, entrelinha, espaçamento entre parágrafos e família tipográfica do PDF enviado;
+- preservação dos parágrafos por blocos do documento original;
+- texto realmente justificado e pesquisável;
+- fichas técnicas posicionadas mais próximas das respectivas obras;
+- zonas de segurança para impedir sobreposição entre ornamentos, obras e QR code;
+- rodapé do QR code com fundo opaco e link clicável;
+- adaptação específica para 2 ou 3 obras, mantendo somente duas páginas;
+- cinco famílias visuais: Orgânico, Contemporâneo, Minimalista, Poético e Geométrico;
+- prévia e exportação em PDF e PNG.
 
 ## Publicação
 
