@@ -7,7 +7,7 @@ import io
 import os
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
 import fitz  # PyMuPDF
@@ -41,6 +41,12 @@ class WorkData:
 
 
 @dataclass
+class TextSegment:
+    text: str
+    suggested_destination: str = "Biografia"
+
+
+@dataclass
 class ParsedPDF:
     raw_text: str
     artist_name: str
@@ -49,6 +55,8 @@ class ParsedPDF:
     images: list[Image.Image]
     image_labels: list[str]
     works: list[WorkData]
+    source_text: str = ""
+    text_segments: list[TextSegment] = field(default_factory=list)
     body_font_size: float = 11.5
     body_leading: float = 15.0
     paragraph_space_after: float = 12.0
@@ -181,6 +189,101 @@ def _median(values: list[float], fallback: float) -> float:
     return float(values[mid]) if len(values) % 2 else float((values[mid - 1] + values[mid]) / 2)
 
 
+def _normalized_key(value: str) -> str:
+    value = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def _strip_non_content_lines(block_text: str, artist_name: str, location: str) -> str:
+    """Remove only exact heading lines, never an entire block that merely starts with a name."""
+    generic = {
+        "artista", "sobre a artista", "sobre a obra", "biografia", "apresentacao",
+        "apresentação", "universo criativo e elas um mundo de imagens",
+    }
+    artist_key = _normalized_key(artist_name)
+    location_key = _normalized_key(location)
+    combined_keys = {
+        _normalized_key(f"{artist_name} - {location}"),
+        _normalized_key(f"{artist_name} · {location}"),
+        _normalized_key(f"{artist_name} {location}"),
+    }
+    kept: list[str] = []
+    for raw_line in block_text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        key = _normalized_key(line)
+        if key in generic or key == artist_key or key in combined_keys or (location_key and key == location_key):
+            continue
+        if re.fullmatch(r"\d{1,3}", key):
+            continue
+        if key.startswith("universo criativo e elas"):
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _bio_score(text: str) -> int:
+    lowered = _normalized_key(text)
+    score = 0
+    phrases = (
+        "e artista", "artista visual", "artista textil", "pintora", "escultora", "fotografa",
+        "especialista", "formada", "graduada", "autodidata", "trajetoria", "carreira",
+        "premiada", "premio", "participou", "exposicao", "exposicoes", "desde", "nasceu",
+        "vive", "mora", "natural de", "sua arte", "seu trabalho", "pesquisa artistica",
+        "inspirada", "atua", "dedica se", "formacao", "anos", "percurso artistico",
+        "aprendizagem", "curiosidade", "dedicacao ao estilo", "determinacao",
+    )
+    score += sum(2 for phrase in phrases if phrase in lowered)
+    if re.search(r"\b\d{1,3}\s+anos\b", lowered):
+        score += 4
+    if len(text) > 320:
+        score += 2
+    if len(text) > 700:
+        score += 2
+    return score
+
+
+def _work_score(text: str) -> int:
+    lowered = _normalized_key(text)
+    score = 0
+    phrases = (
+        "esta obra", "a obra", "bordado", "sobre folha", "sobre tela", "escultura",
+        "instalacao", "tecnica", "dimensoes", "materiais", "fios", "pintura de agulha",
+        "celebra", "composicao", "peca", "fragmento", "metamorfose",
+    )
+    score += sum(2 for phrase in phrases if phrase in lowered)
+    if len(text) < 650:
+        score += 1
+    return score
+
+
+def _split_by_work_titles(text: str, works: list[WorkData]) -> list[str]:
+    """Split a PDF block when a known artwork title begins inside the same text block."""
+    candidates: list[tuple[int, str]] = []
+    for work in works:
+        title = (work.title or "").strip()
+        if len(title) < 3:
+            continue
+        match = re.search(re.escape(title), text, flags=re.I)
+        if match and match.start() > 40:
+            candidates.append((match.start(), title))
+    if not candidates:
+        return [text]
+    positions = sorted({pos for pos, _ in candidates})
+    pieces: list[str] = []
+    last = 0
+    for pos in positions:
+        piece = text[last:pos].strip()
+        if piece:
+            pieces.append(piece)
+        last = pos
+    tail = text[last:].strip()
+    if tail:
+        pieces.append(tail)
+    return pieces or [text]
+
+
 def parse_pdf(pdf_bytes: bytes) -> ParsedPDF:
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page_texts: list[str] = []
@@ -237,50 +340,7 @@ def parse_pdf(pdf_bytes: bytes) -> ParsedPDF:
         artist_name = name_parts[0] if name_parts else first_line
         location = " - ".join(name_parts[1:]) if len(name_parts) > 1 else ""
 
-    # Preserve the paragraph logic of the source PDF by using its text blocks.
-    biography_blocks: list[str] = []
-    metadata_started = False
-    for page_no, _bbox, block_text in sorted(all_blocks, key=lambda item: (item[0], item[1][1], item[1][0])):
-        if re.match(r"^Autor(?:a)?:", block_text, flags=re.I):
-            metadata_started = True
-        if metadata_started:
-            continue
-        if page_no == 1 and block_text.replace(" ", "").startswith(first_line.replace(" ", "")):
-            continue
-        if not block_text:
-            continue
-        block_text = block_text.replace("\n", " ")
-        block_text = re.sub(r"\s+", " ", block_text).strip()
-        if not block_text:
-            continue
-        normalized_block = re.sub(r"\s+", " ", block_text).strip().upper()
-        if normalized_block in {
-            "ARTISTA",
-            "SOBRE A ARTISTA",
-            "SOBRE A OBRA",
-            "BIOGRAFIA",
-            "APRESENTAÇÃO",
-            "APRESENTACAO",
-        }:
-            continue
-        if normalized_block.startswith("UNIVERSO CRIATIVO E ELAS"):
-            continue
-        if re.fullmatch(r"\d{1,3}", normalized_block):
-            continue
-        if biography_blocks and block_text[:1].islower() and not re.search(r"[.!?…][\"'”’)]?$", biography_blocks[-1]):
-            biography_blocks[-1] = biography_blocks[-1].rstrip() + " " + block_text
-        else:
-            biography_blocks.append(block_text)
-
-    biography = "\n\n".join(biography_blocks).strip()
-    if not biography:
-        marker = re.search(r"\n\s*Autor(?:a)?:", raw_text, flags=re.I)
-        bio_block = raw_text[: marker.start()] if marker else raw_text
-        bio_lines = bio_block.splitlines()
-        if bio_lines and bio_lines[0].strip() == first_line:
-            bio_lines = bio_lines[1:]
-        biography = "\n".join(line.strip() for line in bio_lines).strip()
-
+    # Extract technical records before classifying narrative blocks, so titles can guide attribution.
     works: list[WorkData] = []
     pattern = re.compile(
         r"Autor(?:a)?:\s*(?P<author>.*?)\n"
@@ -301,6 +361,84 @@ def parse_pdf(pdf_bytes: bytes) -> ParsedPDF:
             )
         )
 
+    # Preserve every narrative block. Crucially, strip only exact heading lines: some PDF
+    # exporters place the artist's name and the full biography in the same extraction block.
+    candidate_blocks: list[str] = []
+    metadata_started = False
+    for page_no, _bbox, block_text in sorted(all_blocks, key=lambda item: (item[0], item[1][1], item[1][0])):
+        if re.search(r"(?:^|\n)Autor(?:a)?:", block_text, flags=re.I):
+            metadata_started = True
+        if metadata_started:
+            continue
+        cleaned = _strip_non_content_lines(block_text, artist_name, location)
+        if not cleaned:
+            continue
+        cleaned = re.sub(r"[ \t]+", " ", cleaned)
+        for piece in _split_by_work_titles(cleaned, works):
+            piece = re.sub(r"\s*\n\s*", " ", piece).strip()
+            if piece and piece not in candidate_blocks:
+                candidate_blocks.append(piece)
+
+    # If block extraction is sparse, recover the text preceding the first technical record.
+    if not candidate_blocks:
+        marker = re.search(r"\n\s*Autor(?:a)?:", raw_text, flags=re.I)
+        narrative = raw_text[: marker.start()] if marker else raw_text
+        narrative = _strip_non_content_lines(narrative, artist_name, location)
+        candidate_blocks = [p.strip() for p in re.split(r"\n\s*\n", narrative) if p.strip()]
+
+    title_keys = [_normalized_key(work.title) for work in works]
+    bio_segments: list[str] = []
+    work_segments: dict[int, list[str]] = {i: [] for i in range(len(works))}
+    text_segments: list[TextSegment] = []
+    unassigned_work_cursor = 0
+
+    for segment in candidate_blocks:
+        seg_key = _normalized_key(segment)
+        matched_work: int | None = None
+        for idx, title_key in enumerate(title_keys):
+            if title_key and (seg_key == title_key or seg_key.startswith(title_key + " ") or title_key in seg_key[: max(100, len(title_key) + 30)]):
+                matched_work = idx
+                break
+
+        bio_score = _bio_score(segment)
+        work_score = _work_score(segment)
+        if matched_work is not None:
+            destination = f"Obra {matched_work + 1}"
+            # Remove a repeated title from the description field.
+            title = works[matched_work].title.strip()
+            description = re.sub(rf"^\s*{re.escape(title)}\s*[:\-–—]?\s*", "", segment, flags=re.I).strip()
+            if description:
+                work_segments[matched_work].append(description)
+        elif bio_score >= work_score or work_score < 3 or len(segment) > 900:
+            destination = "Biografia"
+            bio_segments.append(segment)
+        else:
+            while unassigned_work_cursor < len(works) and work_segments[unassigned_work_cursor]:
+                unassigned_work_cursor += 1
+            target = min(unassigned_work_cursor, max(0, len(works) - 1)) if works else 0
+            destination = f"Obra {target + 1}" if works else "Biografia"
+            if works:
+                work_segments[target].append(segment)
+            else:
+                bio_segments.append(segment)
+                destination = "Biografia"
+        text_segments.append(TextSegment(text=segment, suggested_destination=destination))
+
+    biography = "\n\n".join(bio_segments).strip()
+    for idx, work in enumerate(works):
+        work.description = "\n\n".join(work_segments.get(idx, [])).strip()
+
+    # Fallback: choose the strongest biographical block instead of dropping all artist text.
+    if not biography and candidate_blocks:
+        strongest = max(candidate_blocks, key=lambda value: (_bio_score(value) - _work_score(value), len(value)))
+        if _bio_score(strongest) >= 2:
+            biography = strongest
+            for idx, work in enumerate(works):
+                if work.description == strongest:
+                    work.description = ""
+
+    source_text = "\n\n".join(candidate_blocks).strip()
+
     # Typography is inferred from the source PDF rather than imposed arbitrarily.
     bio_sizes: list[float] = []
     bio_fonts: list[str] = []
@@ -314,8 +452,8 @@ def parse_pdf(pdf_bytes: bytes) -> ParsedPDF:
             if size > 0:
                 metadata_sizes.append(size)
             continue
-        normalized = text.replace(" ", "")
-        if page_no == 1 and normalized in first_line.replace(" ", ""):
+        normalized = _normalized_key(text)
+        if normalized in {_normalized_key(artist_name), _normalized_key(location), "artista", "sobre a artista", "sobre a obra"}:
             continue
         if size > 0 and len(text) > 2:
             bio_sizes.append(size)
@@ -343,6 +481,8 @@ def parse_pdf(pdf_bytes: bytes) -> ParsedPDF:
         images=images,
         image_labels=labels,
         works=works,
+        source_text=source_text,
+        text_segments=text_segments,
         body_font_size=round(body_size, 2),
         body_leading=round(body_leading, 2),
         paragraph_space_after=round(paragraph_space, 2),

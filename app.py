@@ -43,7 +43,7 @@ st.markdown(
 st.markdown(
     """
 <div class="uc-hero">
-  <span class="uc-badge">VERSÃO EDITORIAL 8</span>
+  <span class="uc-badge">VERSÃO EDITORIAL 9</span>
   <h1>🎨 Gerador de catálogo — Universo Criativo</h1>
   <p>Crie duas páginas sofisticadas e coerentes para cada artista, preservando texto, fotografia e obras.</p>
   <p class="small-note">O sistema mantém a lógica editorial do e-book, mas varia paleta, ornamentos e composição para que cada artista tenha identidade própria.</p>
@@ -124,49 +124,69 @@ if not parsed.images:
 
 st.success(f"Foram encontradas {len(parsed.images)} imagens no PDF.")
 
-st.subheader("2. Confira os textos extraídos e a biografia")
+st.subheader("2. Confira a artista e todos os textos")
 
-# O texto original nunca é ocultado. A classificação automática apenas sugere
-# um destino inicial; a pessoa responsável pode revisar o conteúdo e copiá-lo
-# para a biografia ou para qualquer obra sem perder o original.
-extracted_kind = infer_text_kind(parsed.biography)
+# Preserve every narrative block extracted from the PDF. The automatic separation
+# is only a starting point: biography and artwork descriptions remain editable.
 if st.session_state.get("text_defaults_hash") != file_hash:
     st.session_state["text_defaults_hash"] = file_hash
-    st.session_state["source_text_editor"] = parsed.biography
-    st.session_state["artist_biography"] = (
-        parsed.biography if extracted_kind == "Biografia/apresentação da artista" else ""
-    )
+    st.session_state["source_text_editor"] = parsed.source_text or parsed.biography
+    st.session_state["artist_biography"] = parsed.biography
     for description_index in range(3):
-        st.session_state[f"work_description_{description_index}"] = ""
-    if extracted_kind == "Descrição de uma obra":
-        st.session_state["work_description_0"] = parsed.biography
-        st.session_state["text_assignment_status"] = (
-            "O texto foi sugerido para a descrição da Obra 1. "
-            "O original continua visível e pode ser redistribuído."
-        )
-    else:
-        st.session_state["text_assignment_status"] = (
-            "O texto foi sugerido para a biografia da artista. "
-            "Revise-o antes de gerar o catálogo."
-        )
+        default_description = ""
+        if description_index < len(parsed.works):
+            default_description = parsed.works[description_index].description or ""
+        st.session_state[f"work_description_{description_index}"] = default_description
     st.session_state["artist_name_field"] = parsed.artist_name
     st.session_state["location_field"] = parsed.location
     st.session_state["quote_field"] = ""
 
+    bio_count = 1 if parsed.biography.strip() else 0
+    desc_count = sum(1 for work in parsed.works if (work.description or "").strip())
+    if bio_count and desc_count:
+        st.session_state["text_assignment_status"] = (
+            f"O app separou automaticamente a biografia e {desc_count} descrição(ões) de obra. "
+            "Revise todos os campos antes de gerar."
+        )
+    elif bio_count:
+        st.session_state["text_assignment_status"] = (
+            "O app identificou uma biografia. Revise-a e complete as descrições das obras, se houver."
+        )
+    elif desc_count:
+        st.session_state["text_assignment_status"] = (
+            f"O app identificou {desc_count} descrição(ões) de obra, mas não encontrou uma biografia clara. "
+            "O texto original continua visível abaixo para revisão."
+        )
+    else:
+        st.session_state["text_assignment_status"] = (
+            "O texto foi preservado, mas a separação automática ficou inconclusiva. "
+            "Revise e distribua o conteúdo manualmente."
+        )
+
+if st.session_state.get("text_assignment_status"):
+    st.info(st.session_state["text_assignment_status"])
+
+with st.expander("Ver como o app separou os trechos", expanded=False):
+    if parsed.text_segments:
+        for segment_index, segment in enumerate(parsed.text_segments, start=1):
+            st.markdown(f"**Trecho {segment_index} — sugestão: {segment.suggested_destination}**")
+            st.write(segment.text)
+    else:
+        st.caption("Nenhum trecho narrativo separado foi identificado.")
+
 st.markdown("#### Texto original extraído do PDF")
 source_text = st.text_area(
-    "Revise o texto original antes de distribuí-lo",
-    height=220,
+    "Revise o conteúdo original",
+    height=240,
     key="source_text_editor",
-    placeholder="O texto extraído do PDF aparecerá aqui.",
+    placeholder="Todo o texto narrativo extraído do PDF aparecerá aqui.",
     help=(
-        "Este campo preserva o conteúdo extraído. Editá-lo não altera automaticamente "
-        "a biografia nem as descrições; use os botões abaixo para copiar a versão revisada."
+        "Nenhum trecho é descartado. Este campo reúne biografia e descrições; "
+        "os campos específicos abaixo já vêm preenchidos com a separação sugerida."
     ),
 )
 
 if source_text.strip():
-    st.caption(f"Sugestão automática: **{extracted_kind}**. A decisão final é sua.")
     assignment_cols = st.columns([1.25, 1, 1, 1, 1.1])
     with assignment_cols[0]:
         if st.button("Copiar para a biografia", use_container_width=True):
@@ -186,20 +206,18 @@ if source_text.strip():
                 st.session_state.pop("catalog_outputs", None)
                 st.rerun()
     with assignment_cols[4]:
-        if st.button("Limpar destinos", use_container_width=True):
-            st.session_state["artist_biography"] = ""
+        if st.button("Restaurar separação automática", use_container_width=True):
+            st.session_state["artist_biography"] = parsed.biography
             for description_index in range(3):
-                st.session_state[f"work_description_{description_index}"] = ""
-            st.session_state["text_assignment_status"] = (
-                "Biografia e descrições foram limpas; o texto original foi preservado."
-            )
+                restored = ""
+                if description_index < len(parsed.works):
+                    restored = parsed.works[description_index].description or ""
+                st.session_state[f"work_description_{description_index}"] = restored
+            st.session_state["text_assignment_status"] = "A separação automática foi restaurada."
             st.session_state.pop("catalog_outputs", None)
             st.rerun()
 else:
-    st.warning("Não foi identificado texto de apresentação no PDF. Preencha a biografia manualmente.")
-
-if st.session_state.get("text_assignment_status"):
-    st.info(st.session_state["text_assignment_status"])
+    st.warning("Não foi identificado texto narrativo no PDF. Preencha a biografia manualmente.")
 
 col_a, col_b = st.columns([1, 1.25])
 with col_a:

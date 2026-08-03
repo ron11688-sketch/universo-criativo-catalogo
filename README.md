@@ -2,7 +2,7 @@
 
 Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas editoriais padronizadas para o catálogo **Universo Criativo e Elas — Um Mundo de Imagens**.
 
-## Versão 8 — revisão transparente dos textos
+## Versão 9 — revisão transparente dos textos
 
 - o texto original extraído do PDF permanece sempre visível e editável;
 - a classificação automática é apenas uma sugestão e nunca apaga ou oculta conteúdo;
@@ -22,3 +22,12 @@ Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas edi
 ## Atualização no GitHub
 
 Substitua no repositório os arquivos `app.py`, `catalog_generator.py`, `requirements.txt`, `packages.txt` e `README.md`. O Streamlit atualizará o mesmo endereço automaticamente.
+
+
+## Novidades da versão 9
+
+- Preserva blocos de texto mesmo quando o nome da artista e a biografia estão no mesmo bloco interno do PDF.
+- Reconhece biografias sem o título “Sobre a artista”, usando sinais como idade, formação, trajetória, prêmios e exposições.
+- Separa automaticamente biografia e descrições das obras, mantendo tudo visível e editável.
+- Exibe os trechos detectados e o destino sugerido para conferência.
+- Permite restaurar a separação automática depois de alterações manuais.
