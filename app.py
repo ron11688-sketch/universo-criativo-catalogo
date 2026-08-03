@@ -43,7 +43,7 @@ st.markdown(
 st.markdown(
     """
 <div class="uc-hero">
-  <span class="uc-badge">VERSÃO EDITORIAL 7</span>
+  <span class="uc-badge">VERSÃO EDITORIAL 8</span>
   <h1>🎨 Gerador de catálogo — Universo Criativo</h1>
   <p>Crie duas páginas sofisticadas e coerentes para cada artista, preservando texto, fotografia e obras.</p>
   <p class="small-note">O sistema mantém a lógica editorial do e-book, mas varia paleta, ornamentos e composição para que cada artista tenha identidade própria.</p>
@@ -106,9 +106,14 @@ if not uploaded:
 
 file_hash = hashlib.sha256(uploaded.getvalue()).hexdigest()
 if st.session_state.get("active_file_hash") != file_hash:
+    # A troca manual do PDF também deve iniciar um formulário limpo. Mantemos
+    # apenas o uploader atual e o contador usado pelo botão de reinício.
+    preserved = {"reset_nonce", uploader_key}
+    for state_key in list(st.session_state.keys()):
+        if state_key not in preserved:
+            del st.session_state[state_key]
     st.session_state["active_file_hash"] = file_hash
     st.session_state["variation"] = 0
-    st.session_state.pop("catalog_outputs", None)
 
 with st.spinner("Analisando texto e imagens do PDF..."):
     parsed = cached_parse(uploaded.getvalue())
@@ -119,36 +124,95 @@ if not parsed.images:
 
 st.success(f"Foram encontradas {len(parsed.images)} imagens no PDF.")
 
-st.subheader("2. Confira a artista e a biografia")
+st.subheader("2. Confira os textos extraídos e a biografia")
 
-# Biografia e descrição de obra são campos independentes. Quando o texto
-# extraído parece descrever uma obra, ele é pré-associado à Obra 1 e o campo
-# de biografia começa vazio para evitar uma classificação equivocada.
+# O texto original nunca é ocultado. A classificação automática apenas sugere
+# um destino inicial; a pessoa responsável pode revisar o conteúdo e copiá-lo
+# para a biografia ou para qualquer obra sem perder o original.
 extracted_kind = infer_text_kind(parsed.biography)
 if st.session_state.get("text_defaults_hash") != file_hash:
     st.session_state["text_defaults_hash"] = file_hash
-    if extracted_kind == "Descrição de uma obra":
-        st.session_state["artist_biography_default"] = ""
-        st.session_state["work_1_description_default"] = parsed.biography
-    else:
-        st.session_state["artist_biography_default"] = parsed.biography
-        st.session_state["work_1_description_default"] = ""
-
-if extracted_kind == "Descrição de uma obra":
-    st.info(
-        "O texto extraído parece descrever uma obra. Ele foi associado à Obra 1. "
-        "Insira abaixo a biografia ou apresentação da artista."
+    st.session_state["source_text_editor"] = parsed.biography
+    st.session_state["artist_biography"] = (
+        parsed.biography if extracted_kind == "Biografia/apresentação da artista" else ""
     )
+    for description_index in range(3):
+        st.session_state[f"work_description_{description_index}"] = ""
+    if extracted_kind == "Descrição de uma obra":
+        st.session_state["work_description_0"] = parsed.biography
+        st.session_state["text_assignment_status"] = (
+            "O texto foi sugerido para a descrição da Obra 1. "
+            "O original continua visível e pode ser redistribuído."
+        )
+    else:
+        st.session_state["text_assignment_status"] = (
+            "O texto foi sugerido para a biografia da artista. "
+            "Revise-o antes de gerar o catálogo."
+        )
+    st.session_state["artist_name_field"] = parsed.artist_name
+    st.session_state["location_field"] = parsed.location
+    st.session_state["quote_field"] = ""
+
+st.markdown("#### Texto original extraído do PDF")
+source_text = st.text_area(
+    "Revise o texto original antes de distribuí-lo",
+    height=220,
+    key="source_text_editor",
+    placeholder="O texto extraído do PDF aparecerá aqui.",
+    help=(
+        "Este campo preserva o conteúdo extraído. Editá-lo não altera automaticamente "
+        "a biografia nem as descrições; use os botões abaixo para copiar a versão revisada."
+    ),
+)
+
+if source_text.strip():
+    st.caption(f"Sugestão automática: **{extracted_kind}**. A decisão final é sua.")
+    assignment_cols = st.columns([1.25, 1, 1, 1, 1.1])
+    with assignment_cols[0]:
+        if st.button("Copiar para a biografia", use_container_width=True):
+            st.session_state["artist_biography"] = st.session_state.get("source_text_editor", "")
+            st.session_state["text_assignment_status"] = "Texto copiado para a biografia da artista."
+            st.session_state.pop("catalog_outputs", None)
+            st.rerun()
+    for work_number in range(1, 4):
+        with assignment_cols[work_number]:
+            if st.button(f"Copiar para a Obra {work_number}", use_container_width=True):
+                st.session_state[f"work_description_{work_number - 1}"] = st.session_state.get(
+                    "source_text_editor", ""
+                )
+                st.session_state["text_assignment_status"] = (
+                    f"Texto copiado para a descrição da Obra {work_number}."
+                )
+                st.session_state.pop("catalog_outputs", None)
+                st.rerun()
+    with assignment_cols[4]:
+        if st.button("Limpar destinos", use_container_width=True):
+            st.session_state["artist_biography"] = ""
+            for description_index in range(3):
+                st.session_state[f"work_description_{description_index}"] = ""
+            st.session_state["text_assignment_status"] = (
+                "Biografia e descrições foram limpas; o texto original foi preservado."
+            )
+            st.session_state.pop("catalog_outputs", None)
+            st.rerun()
+else:
+    st.warning("Não foi identificado texto de apresentação no PDF. Preencha a biografia manualmente.")
+
+if st.session_state.get("text_assignment_status"):
+    st.info(st.session_state["text_assignment_status"])
 
 col_a, col_b = st.columns([1, 1.25])
 with col_a:
-    artist_name = st.text_input("Nome da artista", value=parsed.artist_name)
-    location = st.text_input("Estado / país", value=parsed.location)
-    quote = st.text_input("Frase de destaque (opcional)", placeholder="Ex.: A arte é o meu jeito de agradecer.")
+    artist_name = st.text_input("Nome da artista", key="artist_name_field")
+    location = st.text_input("Estado / país", key="location_field")
+    quote = st.text_input(
+        "Frase de destaque (opcional)",
+        placeholder="Ex.: A arte é o meu jeito de agradecer.",
+        key="quote_field",
+    )
 with col_b:
     biography = st.text_area(
         "Biografia / apresentação da artista",
-        value=st.session_state.get("artist_biography_default", parsed.biography),
         height=350,
         placeholder="Cole aqui a trajetória, formação, pesquisa artística ou apresentação da artista.",
         key="artist_biography",
@@ -242,18 +306,23 @@ for i in range(number_of_works):
             if year.strip() and not valid_year(year):
                 invalid_year_entries.append(i + 1)
                 st.error("O ano deve conter quatro algarismos (ex.: 2026) ou ‘s/d’ quando não houver data.")
-            default_description = (
-                st.session_state.get("work_1_description_default", "") if i == 0 else getattr(extracted, "description", "")
-            )
+            description_key = f"work_description_{i}"
+            if description_key not in st.session_state:
+                st.session_state[description_key] = getattr(extracted, "description", "") or ""
             description = st.text_area(
                 "Descrição ou conceito da obra (opcional)",
-                value=default_description,
-                height=120,
-                key=f"work_description_{i}",
+                height=140,
+                key=description_key,
                 placeholder="Breve descrição, conceito, materiais ou contexto da obra.",
+                help=(
+                    "O conteúdo associado pelo app permanece totalmente editável. "
+                    "Use o texto original da etapa 2 para copiar outra versão quando necessário."
+                ),
             )
             description_limit = 420 if number_of_works == 2 else 240
             st.caption(f"{len(description):,}/{description_limit} caracteres recomendados para este layout.")
+            if description.strip():
+                st.caption("Texto visível e editável antes da geração do catálogo.")
             if len(description) > description_limit:
                 st.warning(
                     f"Para manter duas páginas com boa legibilidade, resuma esta descrição para até {description_limit} caracteres."
