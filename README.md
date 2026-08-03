@@ -2,7 +2,7 @@
 
 Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas editoriais padronizadas para o catálogo **Universo Criativo e Elas — Um Mundo de Imagens**.
 
-## Melhorias da versão 6
+## Melhorias da versão 7
 
 - pergunta obrigatória para classificar o texto extraído como biografia, descrição de obra ou ausência de apresentação;
 - quando o texto descreve uma obra, o título passa a ser **Sobre a obra**, evitando apresentá-lo como biografia;
@@ -23,3 +23,13 @@ Aplicativo Streamlit para transformar o PDF de cada artista em duas páginas edi
 ## Atualização no GitHub
 
 Substitua no repositório os arquivos `app.py`, `catalog_generator.py`, `requirements.txt`, `packages.txt` e `README.md`. O Streamlit atualizará o mesmo endereço automaticamente.
+
+
+## Versão 7 — biografia e descrição das obras
+
+- biografia da artista e descrições das obras são campos independentes;
+- textos que parecem descrever uma obra são associados automaticamente à Obra 1;
+- cada obra possui campo opcional de descrição/conceito;
+- limites editoriais preservam a legibilidade em layouts com 2 ou 3 obras;
+- a geração exige uma biografia da artista;
+- o botão de reinício continua removendo o PDF e todos os campos da sessão.

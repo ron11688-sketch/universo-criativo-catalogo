@@ -43,7 +43,7 @@ st.markdown(
 st.markdown(
     """
 <div class="uc-hero">
-  <span class="uc-badge">VERSÃO EDITORIAL 6</span>
+  <span class="uc-badge">VERSÃO EDITORIAL 7</span>
   <h1>🎨 Gerador de catálogo — Universo Criativo</h1>
   <p>Crie duas páginas sofisticadas e coerentes para cada artista, preservando texto, fotografia e obras.</p>
   <p class="small-note">O sistema mantém a lógica editorial do e-book, mas varia paleta, ornamentos e composição para que cada artista tenha identidade própria.</p>
@@ -119,23 +119,26 @@ if not parsed.images:
 
 st.success(f"Foram encontradas {len(parsed.images)} imagens no PDF.")
 
-st.subheader("2. Confira a artista e o texto de apresentação")
-text_kind_options = [
-    "Biografia/apresentação da artista",
-    "Descrição de uma obra",
-    "O PDF não contém texto de apresentação",
-]
-suggested_kind = infer_text_kind(parsed.biography)
-suggested_index = text_kind_options.index(suggested_kind)
-text_kind = st.radio(
-    "Que tipo de texto foi identificado no PDF?",
-    text_kind_options,
-    index=suggested_index,
-    horizontal=True,
-    help="Confirme esta classificação para evitar que a descrição de uma obra seja apresentada como biografia da artista.",
-)
-if suggested_kind == "Descrição de uma obra":
-    st.info("O app identificou indícios de que o texto extraído descreve uma obra. Confirme a opção antes de gerar.")
+st.subheader("2. Confira a artista e a biografia")
+
+# Biografia e descrição de obra são campos independentes. Quando o texto
+# extraído parece descrever uma obra, ele é pré-associado à Obra 1 e o campo
+# de biografia começa vazio para evitar uma classificação equivocada.
+extracted_kind = infer_text_kind(parsed.biography)
+if st.session_state.get("text_defaults_hash") != file_hash:
+    st.session_state["text_defaults_hash"] = file_hash
+    if extracted_kind == "Descrição de uma obra":
+        st.session_state["artist_biography_default"] = ""
+        st.session_state["work_1_description_default"] = parsed.biography
+    else:
+        st.session_state["artist_biography_default"] = parsed.biography
+        st.session_state["work_1_description_default"] = ""
+
+if extracted_kind == "Descrição de uma obra":
+    st.info(
+        "O texto extraído parece descrever uma obra. Ele foi associado à Obra 1. "
+        "Insira abaixo a biografia ou apresentação da artista."
+    )
 
 col_a, col_b = st.columns([1, 1.25])
 with col_a:
@@ -143,28 +146,22 @@ with col_a:
     location = st.text_input("Estado / país", value=parsed.location)
     quote = st.text_input("Frase de destaque (opcional)", placeholder="Ex.: A arte é o meu jeito de agradecer.")
 with col_b:
-    if text_kind == "Biografia/apresentação da artista":
-        section_title = "SOBRE A ARTISTA"
-        profile_text = st.text_area("Biografia / apresentação da artista", value=parsed.biography, height=350)
-    elif text_kind == "Descrição de uma obra":
-        section_title = "SOBRE A OBRA"
-        profile_text = st.text_area("Descrição da obra em destaque", value=parsed.biography, height=350)
-        st.caption("Este texto aparecerá como ‘Sobre a obra’, e não como biografia da artista.")
-    else:
-        section_title = ""
-        profile_text = st.text_area(
-            "Texto manual opcional",
-            value="",
-            height=220,
-            placeholder="Cole aqui uma apresentação, caso deseje incluir texto na página 1.",
-        )
-        if profile_text.strip():
-            section_title = "SOBRE A ARTISTA"
-    st.caption(f"{len(profile_text):,} caracteres. O texto será justificado e dividido automaticamente entre as páginas 1 e 2.")
+    biography = st.text_area(
+        "Biografia / apresentação da artista",
+        value=st.session_state.get("artist_biography_default", parsed.biography),
+        height=350,
+        placeholder="Cole aqui a trajetória, formação, pesquisa artística ou apresentação da artista.",
+        key="artist_biography",
+    )
+    st.caption(
+        f"{len(biography):,} caracteres. O texto será justificado e dividido automaticamente entre as páginas 1 e 2."
+    )
     st.caption(
         f"Configuração detectada no PDF: corpo {parsed.body_font_size:g} pt, "
         f"entrelinha {parsed.body_leading:g} pt e espaçamento entre parágrafos {parsed.paragraph_space_after:g} pt."
     )
+
+section_title = "SOBRE A ARTISTA"
 
 preserve_source_typography = st.checkbox(
     "Preservar o tamanho da fonte e a configuração dos parágrafos do PDF enviado",
@@ -245,10 +242,26 @@ for i in range(number_of_works):
             if year.strip() and not valid_year(year):
                 invalid_year_entries.append(i + 1)
                 st.error("O ano deve conter quatro algarismos (ex.: 2026) ou ‘s/d’ quando não houver data.")
+            default_description = (
+                st.session_state.get("work_1_description_default", "") if i == 0 else getattr(extracted, "description", "")
+            )
+            description = st.text_area(
+                "Descrição ou conceito da obra (opcional)",
+                value=default_description,
+                height=120,
+                key=f"work_description_{i}",
+                placeholder="Breve descrição, conceito, materiais ou contexto da obra.",
+            )
+            description_limit = 420 if number_of_works == 2 else 240
+            st.caption(f"{len(description):,}/{description_limit} caracteres recomendados para este layout.")
+            if len(description) > description_limit:
+                st.warning(
+                    f"Para manter duas páginas com boa legibilidade, resuma esta descrição para até {description_limit} caracteres."
+                )
         if standardize:
             title = clean_title(title)
             size = normalize_size(size)
-        work_entries.append(WorkData(author=author, title=title, technique=technique, size=size, year=year, image=work_image))
+        work_entries.append(WorkData(author=author, title=title, technique=technique, size=size, year=year, description=description, image=work_image))
         work_source_ids.append(source_id)
 
 st.subheader("5. Link da artista")
@@ -305,8 +318,15 @@ if st.button("Gerar prévia editorial", type="primary", use_container_width=True
     errors: list[str] = []
     if not artist_name.strip():
         errors.append("Preencha o nome da artista.")
-    if text_kind in {"Biografia/apresentação da artista", "Descrição de uma obra"} and not profile_text.strip():
-        errors.append("Preencha o texto de apresentação selecionado.")
+    if not biography.strip():
+        errors.append("Preencha a biografia ou apresentação da artista.")
+    description_limit = 420 if number_of_works == 2 else 240
+    overlong_descriptions = [i + 1 for i, work in enumerate(work_entries) if len((work.description or "").strip()) > description_limit]
+    if overlong_descriptions:
+        errors.append(
+            "Resuma a descrição das obras " + ", ".join(map(str, overlong_descriptions)) +
+            f" para até {description_limit} caracteres."
+        )
     if invalid_year_entries:
         numbers = ", ".join(str(number) for number in invalid_year_entries)
         errors.append(f"Revise o campo Ano nas obras: {numbers}.")
@@ -333,7 +353,7 @@ if st.button("Gerar prévia editorial", type="primary", use_container_width=True
                 pdf_bytes, p1_bytes, p2_bytes, overflow, chosen_family, final_palette = build_catalog(
                     artist_name=artist_name.strip(),
                     location=location.strip(),
-                    biography=profile_text.strip(),
+                    biography=biography.strip(),
                     portrait=parsed.images[portrait_index],
                     works=work_entries,
                     quote=quote.strip(),
@@ -346,7 +366,7 @@ if st.button("Gerar prévia editorial", type="primary", use_container_width=True
                     paragraph_space_after=paragraph_space_after,
                     metadata_font_size=metadata_font_size,
                     body_font_family=body_font_family,
-                    section_title=section_title,
+                    section_title="SOBRE A ARTISTA",
                 )
             st.session_state["catalog_outputs"] = (
                 pdf_bytes, p1_bytes, p2_bytes, overflow, artist_name, chosen_family, final_palette

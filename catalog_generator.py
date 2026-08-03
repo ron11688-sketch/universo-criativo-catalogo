@@ -36,6 +36,7 @@ class WorkData:
     size: str = ""
     year: str = ""
     author: str = ""
+    description: str = ""
     image: Image.Image | None = None
 
 
@@ -759,7 +760,7 @@ def _draw_page_number(c: canvas.Canvas, theme: Theme, page_no: int) -> None:
     c.restoreState()
 
 
-def _metadata_html(work: WorkData) -> str:
+def _metadata_html(work: WorkData, description_size: float = 8.4) -> str:
     fields = [
         ("Autora", work.author),
         ("Título", work.title),
@@ -772,11 +773,15 @@ def _metadata_html(work: WorkData) -> str:
         if value and value.strip():
             safe = value.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             rows.append(f"<b>{label}:</b> {safe}")
+    description = (work.description or "").strip()
+    if description:
+        safe_desc = description.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        safe_desc = safe_desc.replace("\n\n", "<br/><br/>").replace("\n", " ")
+        rows.append(f'<br/><font size="{description_size:.1f}">{safe_desc}</font>')
     return "<br/>".join(rows)
 
-
 def _draw_metadata(c: canvas.Canvas, work: WorkData, x: float, y: float, w: float, h: float, style: ParagraphStyle, theme: Theme) -> None:
-    p = Paragraph(_metadata_html(work), style)
+    p = Paragraph(_metadata_html(work, max(7.5, style.fontSize - 1.0)), style)
     _, ph = p.wrap(w, h)
     p.drawOn(c, x, y + h - ph)
     c.setStrokeColor(_as_color(theme.accent, 0.55))
